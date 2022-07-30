@@ -1,0 +1,4 @@
+/.vscode/
+/build/
+/custom_options.cmake
+/src/wifi_config.h

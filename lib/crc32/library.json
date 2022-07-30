@@ -1,0 +1,20 @@
+{
+  "name": "CRC32",
+  "keywords": "CRC32",
+  "description": "An Arduino library for calculating a CRC32 checksum.",
+  "license": "MIT",
+  "homepage": "https://github.com/bakercp/CRC32",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bakercp/CRC32"
+  },
+  "version": "2.0.0",
+  "authors": [
+    {
+      "name": "Christopher Baker",
+      "email": "info@christopherbaker.net"
+    }
+  ],
+  "frameworks": "*",
+  "platforms": "*"
+}

@@ -1,0 +1,102 @@
+; MIT License
+; 
+; Copyright (c) 2021 GitJer
+; 
+; Permission is hereby granted, free of charge, to any person obtaining a copy
+; of this software and associated documentation files (the "Software"), to deal
+; in the Software without restriction, including without limitation the rights
+; to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+; copies of the Software, and to permit persons to whom the Software is
+; furnished to do so, subject to the following conditions:
+; 
+; The above copyright notice and this permission notice shall be included in all
+; copies or substantial portions of the Software.
+; 
+; THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+; IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+; FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+; AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+; LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+; SOFTWARE.
+; 
+; https://github.com/GitJer/Some_RPI-Pico_stuff/blob/main/Rotary_encoder/pio_rotary_encoder.pio
+
+.program rotary_encoder
+.wrap_target
+.origin 0          ; The jump table has to start at 0
+                   ; it contains the correct jumps for each of the 16  
+                   ; combination of 4 bits formed by A'B'AB
+                   ; A = current reading of pin_A of the rotary encoder
+                   ; A' = previous reading of pin_A of the rotary encoder
+                   ; B = current reading of pin_B of the rotary encoder
+                   ; B' = previous reading of pin_B of the rotary encoder
+    jmp read       ; 0000 = from 00 to 00 = no change in reading
+    jmp CW         ; 0001 = from 00 to 01 = clockwise rotation
+    jmp CCW        ; 0010 = from 00 to 10 = counter clockwise rotation
+    jmp read       ; 0011 = from 00 to 11 = error
+
+    jmp CCW        ; 0100 = from 01 to 00 = counter clockwise rotation
+    jmp read       ; 0101 = from 01 to 01 = no change in reading 
+    jmp read       ; 0110 = from 01 to 10 = error
+    jmp CW         ; 0111 = from 01 to 11 = clockwise rotation
+ 
+    jmp CW         ; 1000 = from 10 to 00 = clockwise rotation
+    jmp read       ; 1001 = from 10 to 01 = error
+    jmp read       ; 1010 = from 10 to 10 = no change in reading 
+    jmp CCW        ; 1011 = from 10 to 11 = counter clockwise rotation
+ 
+    jmp read       ; 1100 = from 11 to 00 = error
+    jmp CCW        ; 1101 = from 11 to 01 = counter clockwise rotation
+    jmp CW         ; 1110 = from 11 to 10 = clockwise rotation
+    jmp read       ; 1111 = from 11 to 11 = no change in reading 
+
+pc_start:          ; this is the entry point for the program
+    in pins 2      ; read the current values of A and B and use 
+                   ; them to initialize the previous values (A'B')
+read:
+    mov OSR ISR    ; the OSR is (after the next instruction) used to shift 
+                   ; the two bits with the previous values into the ISR
+    out ISR 2      ; shift the previous value into the ISR. This also sets
+                   ; all other bits in the ISR to 0
+    in pins 2      ; shift the current value into the ISR
+                   ; the 16 LSB of the ISR now contain 000000000000A'B'AB
+                   ; this represents a jmp instruction to the address A'B'AB 
+    mov exec ISR   ; do the jmp encoded in the ISR
+CW:                ; a clockwise rotation was detected
+    irq wait 0 rel ; signal a clockwise rotation via IRQ 0 << sm_id -> 0x1 or 0x4
+    jmp read       ; jump to reading the current values of A and B
+CCW:               ; a counter clockwise rotation was detected
+    irq wait 2 rel ; signal a counter clockwise rotation via IRQ 2 << sm_id -> 0x2 or 0x8
+    jmp read       ; jump to reading the current values of A and B.
+.wrap
+
+% c-sdk {
+static inline void rotary_encoder_init(PIO pio, uint sm, uint offset, uint pin_a) {
+    pio_sm_config c = rotary_encoder_program_get_default_config(offset);
+
+    /* map the state machine's IN pin group to pin_a */
+    sm_config_set_in_pins(&c, pin_a);
+    /* set shift to left: bits shifted by 'in' enter at the least significant bit (LSB), no autopush */
+    sm_config_set_in_shift(&c, false, false, 0);
+
+    const uint pin_b { pin_a + 1U };
+
+    /* set the pin's GPIO function (connect PIO to the pad) */
+    pio_gpio_init(pio, pin_a);
+    pio_gpio_init(pio, pin_b);
+
+    /* configure the used pins with pull up */
+    gpio_set_pulls(pin_a, false, false);    
+    gpio_set_pulls(pin_b, false, false);
+
+    /* set the pin direction to input at the PIO */
+    pio_sm_set_consecutive_pindirs(pio, sm, pin_a, 2, false);
+
+    /* load our configuration, and jump to the start of the program */
+    pio_sm_init(pio, sm, 16, &c); // Note: the program starts after the jump table -> initial_pc = 16
+
+    /* set the state machine running*/
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
