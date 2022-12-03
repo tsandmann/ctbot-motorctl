@@ -91,14 +91,14 @@ UartTcp::~UartTcp() {
 
 bool UartTcp::init() {
     if (!p_tcp_server_->init(wifi_ssid, wifi_pass, WIFI_CORE_ID_)) {
-        if (DEBUG_) {
+        if constexpr (DEBUG_) {
             printf("UartTcp::init(): p_tcp_server_->init() failed, abort.\n");
         }
         return false;
     }
 
     if (!p_tcp_server_->open(23)) {
-        if (DEBUG_) {
+        if constexpr (DEBUG_) {
             printf("UartTcp::init(): p_tcp_server_->open() failed, abort.\n");
         }
         return false;
@@ -136,17 +136,19 @@ void UartTcp::run() {
 
             auto p_recv_buffer = p_tcp_rx_buffer_->data();
             /* discard telnet commands during first 2 seconds */
-            if (*p_recv_buffer == 0xff && rx_len >= 3) {
+            while (*p_recv_buffer == 0xff && rx_len >= 3) {
                 if (time_us_32() / 1'000UL < p_tcp_server_->get_connect_time(client) + 2'000UL) {
                     p_recv_buffer += 3;
                     rx_len -= 3;
+                } else {
+                    break;
                 }
             }
 
             uart_write_blocking(p_uart_, p_recv_buffer, rx_len);
         }
 
-        if (DEBUG_) {
+        if constexpr (DEBUG_) {
             const auto tmp { min_rx_buffer_free_ };
             min_rx_buffer_free_ = std::min(min_rx_buffer_free_, xStreamBufferSpacesAvailable(uart_rx_stream_));
             if (tmp != min_rx_buffer_free_) {
@@ -175,12 +177,12 @@ void UartTcp::run() {
                         uart_write_blocking(uart1, reinterpret_cast<const uint8_t*>("\r\n"), 2);
                     }
 
-                    if (DEBUG_) {
+                    if constexpr (DEBUG_) {
                         tm* utc { std::gmtime(&time) };
                         printf("UartTcp::run(): Got NTP response: %02d/%02d/%04d %02d:%02d:%02d UTC\n", utc->tm_mday, utc->tm_mon + 1, utc->tm_year + 1'900,
                             utc->tm_hour, utc->tm_min, utc->tm_sec);
                     }
-                } else if (DEBUG_) {
+                } else if constexpr (DEBUG_) {
                     printf("UartTcp::run(): NTP request failed.\n");
                 }
             }

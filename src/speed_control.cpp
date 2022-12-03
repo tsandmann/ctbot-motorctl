@@ -48,7 +48,7 @@ uint16_t SpeedControl::adc_offset_ {};
 
 SpeedControl::SpeedControl(RotaryEncoder& enc, Motor& motor, uint8_t adc_pin)
     : direction_ { true }, setpoint_ {}, input_ {}, output_ {}, kp_ { INITIAL_KP_ }, ki_ { INITIAL_KI_ }, kd_ { INITIAL_KD_ }, enc_rpm_ {}, enc_counts_ {},
-      p_pid_controller_ { new Pid { input_, output_, setpoint_, kp_, ki_, kd_, true } }, encoder_ { enc }, motor_ { motor } {
+      p_pid_controller_ { new Pid { input_, output_, setpoint_, kp_, ki_, kd_, true } }, enabled_ { true }, encoder_ { enc }, motor_ { motor } {
     if (!p_pid_controller_) {
         return;
     }
@@ -106,13 +106,18 @@ void SpeedControl::reset() {
 void SpeedControl::run(const uint32_t time_ms) {
     enc_rpm_ = encoder_.get_rpm_time();
     enc_counts_ = encoder_.get_counts();
-    if (DEBUG_) {
-        // printf("SpeedControl::run(%u): enc_rpm=%d enc_counts=%d\n", time_ms, enc_rpm_, enc_counts_);
+    if constexpr (DEBUG_LEVEL_ >= 3) {
+        printf("SpeedControl::run(%u): enc_rpm=%d enc_counts=%d\n", time_ms, enc_rpm_, enc_counts_);
     }
-    input_ = std::abs(enc_rpm_);
 
-    if (!p_pid_controller_ || !p_pid_controller_->compute(time_ms)) {
-        return;
+    if (enabled_) {
+        input_ = std::abs(enc_rpm_);
+
+        if (!p_pid_controller_ || !p_pid_controller_->compute(time_ms)) {
+            return;
+        }
+    } else {
+        output_ = setpoint_;
     }
 
     int32_t pwm;
@@ -124,7 +129,7 @@ void SpeedControl::run(const uint32_t time_ms) {
 
     if (motor_.get_pwm() != (direction_ ? pwm : -pwm)) {
         motor_.set_pwm(direction_ ? pwm : -pwm);
-        if (DEBUG_) {
+        if constexpr (DEBUG_LEVEL_ >= 2) {
             printf("SpeedControl::run(%u): set pwm to %d\n", time_ms, direction_ ? pwm : -pwm);
         }
     }
@@ -168,7 +173,7 @@ void SpeedControl::controller(void*) {
         adc_offset_ = static_cast<uint16_t>(adc_sum - 10.f);
     }
 
-    if (DEBUG_) {
+    if constexpr (DEBUG_LEVEL_) {
         printf("SpeedControl::controller(): adc_offset=%u\n", adc_offset_);
     }
     motor_current_ma_ = 0;
@@ -197,10 +202,10 @@ void SpeedControl::controller(void*) {
                 p_speed_buffer = speed_buffer;
                 auto p_data { reinterpret_cast<const SpeedControl::SpeedData*>(speed_buffer) };
                 switch (p_data->cmd) {
-                    case 0:
+                    case 0: // normal mode -> set speed
                         if (SpeedControl::set_speed(*p_data)) {
                             if (p_data->speed[0] != last_speed[0] || p_data->speed[1] != last_speed[1]) {
-                                if (DEBUG_) {
+                                if (DEBUG_LEVEL_) {
                                     printf("speed set to %f\t%f\n", p_data->speed[0], p_data->speed[1]);
                                 }
                                 last_speed[0] = p_data->speed[0];
@@ -209,7 +214,7 @@ void SpeedControl::controller(void*) {
                             controller_list_[0]->set_speed(p_data->speed[0]);
                             controller_list_[1]->set_speed(p_data->speed[1]);
                         } else {
-                            if (DEBUG_) {
+                            if (DEBUG_LEVEL_) {
                                 printf("ERROR: invalid speed data received:\n");
                                 for (size_t i {}; i < sizeof(SpeedData); ++i) {
                                     printf("0x%x ", speed_buffer[i]);
@@ -219,17 +224,41 @@ void SpeedControl::controller(void*) {
                         }
                         break;
 
-                    case 1:
-                        if (DEBUG_) {
+                    case 1: // reset
+                        if constexpr (DEBUG_LEVEL_) {
                             printf("reset cmd received\n");
                         }
-                        // FIXME: validate crc
+
+                        if (!check_crc(*p_data)) {
+                            break;
+                        }
+
                         controller_list_[0]->reset();
                         controller_list_[1]->reset();
                         break;
 
+                    case 2: // enable/disable
+                        if constexpr (DEBUG_LEVEL_) {
+                            printf("enable/disable cmd received\n");
+                        }
+
+                        if (!check_crc(*p_data)) {
+                            break;
+                        }
+
+                        controller_list_[0]->set_enable(p_data->speed[0] == 0.f ? false : true);
+                        controller_list_[1]->set_enable(p_data->speed[1] == 0.f ? false : true);
+
+                        if (DEBUG_LEVEL_ && p_data->speed[0] == 0.f) {
+                            printf("speed controller disabled\n");
+                        } else if (DEBUG_LEVEL_ && p_data->speed[0] == 1.f) {
+                            printf("speed controller enabled\n");
+                        }
+
+                        break;
+
                     default:
-                        if (DEBUG_) {
+                        if constexpr (DEBUG_LEVEL_) {
                             printf("ERROR: invalid command received: 0x%x\n", p_data->cmd);
                             for (size_t i {}; i < sizeof(SpeedData); ++i) {
                                 printf("0x%x ", speed_buffer[i]);
@@ -252,7 +281,7 @@ void SpeedControl::controller(void*) {
             for (; i < n; ++i) {
                 int32_t adc_result { adc_fifo_get() - (ADC_SUBTRACT_OFFSET_ ? adc_offset_ : 0) };
                 if (ADC_SUBTRACT_OFFSET_ && adc_result < 0) {
-                    if (DEBUG_) {
+                    if constexpr (DEBUG_LEVEL_ >= 2) {
                         printf("adc_result[%u]=%d\n", i, adc_result);
                     }
                     adc_result = 0;
@@ -310,14 +339,12 @@ size_t SpeedControl::get_enc_data(EncData& data) {
 bool SpeedControl::set_speed(const SpeedData& data) {
     auto ptr { reinterpret_cast<const uint8_t*>(&data) };
     const auto checksum { CRC32::calculate(ptr, sizeof(data) - sizeof(data.crc)) };
-    if (checksum != data.crc) {
+    if (!check_crc(data)) {
         for (auto p_ctrl : controller_list_) {
             if (p_ctrl) {
                 p_ctrl->set_speed(0.f);
             }
         }
-
-        printf("speed=%f\t%f\tchecksum=%lu\tcrc=%lu\n", data.speed[0], data.speed[1], checksum, data.crc);
         return false;
     }
 
@@ -327,6 +354,17 @@ bool SpeedControl::set_speed(const SpeedData& data) {
             p_ctrl->set_speed(data.speed[i]);
         }
         ++i;
+    }
+
+    return true;
+}
+
+bool SpeedControl::check_crc(const SpeedData& data) {
+    auto ptr { reinterpret_cast<const uint8_t*>(&data) };
+    const auto checksum { CRC32::calculate(ptr, sizeof(data) - sizeof(data.crc)) };
+    if (checksum != data.crc) {
+        printf("SpeedControl::check_crc(): cmd=%u\tspeed=%f\t%f\tchecksum=%lu\tcrc=%lu\n", data.cmd, data.speed[0], data.speed[1], checksum, data.crc);
+        return false;
     }
 
     return true;

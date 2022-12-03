@@ -41,13 +41,13 @@ RotaryEncoder::RotaryEncoder(const uint32_t pin_a, const bool direction) : direc
     static_assert(PIO_ID_ < 2, "invalid PIO_ID_");
 
     if (next_id_ > 1) {
-        if (DEBUG_) {
+        if constexpr (DEBUG_) {
             printf("RotaryEncoder::RotaryEncoder(): no more ressources available.\n");
         }
         return;
     }
 
-    if (DEBUG_) {
+    if constexpr (DEBUG_) {
         printf("RotaryEncoder::RotaryEncoder(): id=%u\n", next_id_);
     }
 
@@ -55,11 +55,11 @@ RotaryEncoder::RotaryEncoder(const uint32_t pin_a, const bool direction) : direc
 
     PIO const pio { PIO_ID_ ? pio1 : pio0 };
     const auto sm { pio_claim_unused_sm(pio, false) };
-    if (DEBUG_) {
+    if constexpr (DEBUG_) {
         printf("RotaryEncoder::RotaryEncoder(): pio %u sm=%d\n", PIO_ID_, sm);
     }
     if (sm < 0) {
-        if (DEBUG_) {
+        if constexpr (DEBUG_) {
             printf("RotaryEncoder::RotaryEncoder(): unable to claim pio sm.\n");
         }
         return;
@@ -67,7 +67,7 @@ RotaryEncoder::RotaryEncoder(const uint32_t pin_a, const bool direction) : direc
 
     if (next_id_ == 0) {
         if (!pio_can_add_program(pio, &rotary_encoder_program)) {
-            if (DEBUG_) {
+            if constexpr (DEBUG_) {
                 printf("RotaryEncoder::RotaryEncoder(): unable to load pio program.\n");
             }
             pio_sm_unclaim(pio, sm);
@@ -76,7 +76,7 @@ RotaryEncoder::RotaryEncoder(const uint32_t pin_a, const bool direction) : direc
 
         /* load the pio program into the pio memory */
         pio_offset_ = pio_add_program(pio, &rotary_encoder_program);
-        if (DEBUG_) {
+        if constexpr (DEBUG_) {
             printf("RotaryEncoder::RotaryEncoder(): pio %u offset=%u\n", PIO_ID_, pio_offset_);
         }
 
@@ -125,7 +125,7 @@ int32_t RotaryEncoder::get_rpm() {
     last_rpm_us_ = now_us;
 
     const auto rpm_factor { (1'000'000.f * 60.f / static_cast<float>(COUNTS_PER_ROTATION_)) / static_cast<float>(dt_us) };
-    if (DEBUG_) {
+    if constexpr (DEBUG_) {
         printf("diff=%ld\tdt=%lu us\n", rot_diff, data_.dt);
     }
     const auto rpm { static_cast<int32_t>(rot_diff * rpm_factor) };

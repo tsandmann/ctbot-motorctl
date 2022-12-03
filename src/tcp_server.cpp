@@ -75,7 +75,7 @@ void TcpServer::init_task(void* arg) {
     delete p_data;
     p_data = nullptr;
 
-    if (DEBUG_) {
+    if constexpr (DEBUG_) {
         printf("TcpServer::init_task() started on core %u.\n", portGET_CORE_ID());
     }
     if (!cyw43_arch_init_) {
@@ -87,7 +87,7 @@ void TcpServer::init_task(void* arg) {
 
         cyw43_arch_init_ = true;
 
-        if (DEBUG_) {
+        if constexpr (DEBUG_) {
             printf("TcpServer::init_task() cyw43_arch_init_with_country() done.\n");
         }
     }
@@ -110,7 +110,7 @@ void TcpServer::init_task(void* arg) {
 }
 
 err_t TcpServer::cb_accept(void* arg, struct tcp_pcb* client_pcb, err_t err) {
-    if (DEBUG_) {
+    if constexpr (DEBUG_) {
         printf("TcpServer::cb_accept()\n");
     }
 
@@ -162,7 +162,7 @@ err_t TcpServer::cb_sent(void* arg, tcp_pcb* client_pcb, u16_t len) {
     cyw43_arch_lwip_check();
     auto& to_send { p_this->clients_.at(client_pcb)->to_send_ };
 
-    if (DEBUG_) {
+    if constexpr (DEBUG_) {
         printf("TcpServer::cb_sent(): len=%u to_send_=%u\n", len, to_send);
     }
     to_send -= len;
@@ -175,7 +175,7 @@ err_t TcpServer::cb_sent(void* arg, tcp_pcb* client_pcb, u16_t len) {
 }
 
 err_t TcpServer::cb_recv(void* arg, tcp_pcb* client_pcb, struct pbuf* p, err_t err) {
-    if (DEBUG_) {
+    if constexpr (DEBUG_) {
         printf("TcpServer::cb_recv()\n");
     }
 
@@ -206,7 +206,7 @@ err_t TcpServer::cb_recv(void* arg, tcp_pcb* client_pcb, struct pbuf* p, err_t e
     if (p->tot_len > 0) {
         auto& received { p_this->clients_.at(client_pcb)->received_ };
 
-        if (DEBUG_) {
+        if constexpr (DEBUG_) {
             printf("TcpServer::cb_recv(): %u/%u err %d\n", p->tot_len, received, err);
         }
 
@@ -220,7 +220,7 @@ err_t TcpServer::cb_recv(void* arg, tcp_pcb* client_pcb, struct pbuf* p, err_t e
 }
 
 err_t TcpServer::cb_poll(void*, tcp_pcb*) {
-    if (DEBUG_) {
+    if constexpr (DEBUG_) {
         printf("TcpServer::cb_poll()\n");
     }
 
@@ -276,7 +276,7 @@ bool TcpServer::open(uint16_t port) {
 }
 
 bool TcpServer::close() {
-    if (DEBUG_) {
+    if constexpr (DEBUG_) {
         printf("TcpServer::close()\n");
     }
 
@@ -318,14 +318,14 @@ bool TcpServer::close() {
 }
 
 uint16_t TcpServer::read(tcp_pcb* client_pcb, void* p_data, uint16_t len) {
-    if (DEBUG_) {
+    if constexpr (DEBUG_) {
         printf("TcpServer::read(%u)\n", len);
     }
 
     cyw43_arch_lwip_begin();
     if (clients_.empty()) {
         cyw43_arch_lwip_end();
-        if (DEBUG_) {
+        if constexpr (DEBUG_) {
             printf("TcpServer::read(): no client connected.\n");
         }
         return 0;
@@ -343,7 +343,7 @@ uint16_t TcpServer::read(tcp_pcb* client_pcb, void* p_data, uint16_t len) {
 }
 
 uint16_t TcpServer::write(tcp_pcb* client_pcb, const void* p_data, uint16_t len, bool copy) {
-    if (DEBUG_) {
+    if constexpr (DEBUG_) {
         printf("TcpServer::write(%u)\n", len);
     }
 
@@ -394,7 +394,7 @@ uint16_t TcpServer::write(const void* p_data, uint16_t len, bool copy) {
 }
 
 bool TcpServer::flush() const {
-    if (DEBUG_) {
+    if constexpr (DEBUG_) {
         printf("TcpServer::flush()\n");
     }
 
@@ -405,7 +405,7 @@ bool TcpServer::flush() const {
     cyw43_arch_lwip_begin();
     if (clients_.empty()) {
         cyw43_arch_lwip_end();
-        if (DEBUG_) {
+        if constexpr (DEBUG_) {
             printf("TcpServer::flush(): no client connected.\n");
         }
         return 0;
@@ -440,7 +440,7 @@ tcp_pcb* TcpServer::available() const {
         return nullptr;
     }
 
-    cyw43_arch_lwip_begin(); // FIXME: distinct mutex for clients_?
+    cyw43_arch_lwip_begin(); // TODO: distinct mutex for clients_?
     for (auto client : clients_) {
         if (client.second->received_) {
             const auto res { client.first };

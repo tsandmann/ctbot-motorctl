@@ -47,7 +47,7 @@ namespace ctbot {
  * @enduml
  */
 class SpeedControl {
-    static constexpr bool DEBUG_ { false };
+    static constexpr uint8_t DEBUG_LEVEL_ { 0 }; // 0: off, 1: info, 2: debug, 3: noisy
 
 protected:
     static constexpr size_t MAX_INSTANCES_ { 2 };
@@ -76,6 +76,7 @@ protected:
     bool direction_;
     float setpoint_, input_, output_;
     float kp_, ki_, kd_;
+    bool enabled_;
     int32_t enc_rpm_;
     int32_t enc_counts_;
     Pid* p_pid_controller_;
@@ -194,6 +195,13 @@ public:
      * @param[in] kd: Derivative tuning parameter
      */
     void set_parameters(const float kp, const float ki, const float kd);
+
+    void set_enable(bool value) {
+        enabled_ = value;
+    }
+
+protected:
+    static bool check_crc(const SpeedData& data);
 };
 
 } // namespace ctbot

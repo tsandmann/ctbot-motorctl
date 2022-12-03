@@ -20,10 +20,8 @@ cmake_minimum_required(VERSION 3.13)
 include(custom_options.cmake OPTIONAL)
 
 set(PICO_BOARD pico_w CACHE INTERNAL "")
-set(FREERTOS_KERNEL_PATH "../FreeRTOS-Kernel" CACHE INTERNAL "")
 
 include(pico_sdk_import.cmake)
-include(FreeRTOS_Kernel_import.cmake)
 
 project(ctbot_motorctl C CXX ASM)
 set(CMAKE_C_STANDARD 11)
@@ -61,4 +59,14 @@ pico_enable_stdio_usb(motorctl 1)
 
 pico_add_extra_outputs(motorctl)
 
+add_subdirectory(FreeRTOS-Kernel/portable/ThirdParty/GCC/RP2040 FreeRTOS-Kernel)
+
 target_link_libraries(motorctl FreeRTOS-Kernel pico_cyw43_arch_lwip_sys_freertos pico_stdlib hardware_pwm hardware_adc)
+
+if (STTY_UPLOAD_COMMAND)
+    install(CODE "execute_process(COMMAND ${STTY_UPLOAD_COMMAND} COMMAND ${CMAKE_COMMAND} -E sleep 2)")
+endif (STTY_UPLOAD_COMMAND)
+
+if (UPLOAD_PATH)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/motorctl.uf2" DESTINATION "${UPLOAD_PATH}/")
+endif (UPLOAD_PATH)

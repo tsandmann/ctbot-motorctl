@@ -3,7 +3,7 @@
  * @author  Brett Beauregard <br3ttb@gmail.com> brettbeauregard.com
  * @author  Timo Sandmann
  * @date    04.06.2017
- * @brief   PID Library for use with c't-Bot teensy framework
+ * @brief   PID Library for use with ct-Bot motor controller firmware
  * @version 1.2.0
  * @see     https://github.com/br3ttb/Arduino-PID-Library
  *

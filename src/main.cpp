@@ -38,7 +38,8 @@
 #include <cstdio>
 
 
-static constexpr bool DEBUG { true };
+static constexpr bool DEBUG { false };
+static constexpr bool WIFI_SERVER_AVAILABLE { true };
 static constexpr uint32_t DEBUG_CYCLE_TIME_MS { 500 };
 
 static constexpr uint8_t INIT_CORE_ID { 0 };
@@ -71,17 +72,19 @@ static UartTcp* server;
 static void setup_task(void*) {
     vTaskCoreAffinitySet(xTimerGetTimerDaemonTaskHandle(), 1 << INIT_CORE_ID);
 
-    server = new UartTcp { uart1, UART1_RX_PIN, UART1_TX_PIN, 1'000'000 };
-    configASSERT(server);
+    if constexpr (WIFI_SERVER_AVAILABLE) {
+        server = new UartTcp { uart1, UART1_RX_PIN, UART1_TX_PIN, 1'000'000 };
+        configASSERT(server);
 
-    while (!server->init()) {
-        if ((DEBUG)) {
-            printf("server->init() failed, retrying in 300 s ...\n");
+        while (!server->init()) {
+            if constexpr (DEBUG) {
+                printf("server->init() failed, retrying in 300 s ...\n");
+            }
+            vTaskDelay(pdMS_TO_TICKS(300'000UL));
         }
-        vTaskDelay(pdMS_TO_TICKS(300'000UL));
-    }
 
-    vTaskCoreAffinitySet(xTaskGetHandle("tcpip_thread"), 1 << 1);
+        vTaskCoreAffinitySet(xTaskGetHandle("tcpip_thread"), 1 << 1);
+    }
 
     encoders[0] = new RotaryEncoder { ENC_L_PIN_A, false };
     encoders[1] = new RotaryEncoder { ENC_R_PIN_A, true };
@@ -98,7 +101,7 @@ static void setup_task(void*) {
     vTaskPrioritySet(nullptr, 1);
 
     FreeRTOSRuntimeStats* p_stats {};
-    if (DEBUG) {
+    if constexpr (DEBUG) {
         p_stats = new FreeRTOSRuntimeStats;
         configASSERT(p_stats);
     }
@@ -120,7 +123,7 @@ static void setup_task(void*) {
             // printf("   rpm motor=%ld\trpm gb_10=%ld\n", rpm_1_enc, rpm_1_enc / static_cast<int32_t>(SpeedControl::GB_RATIO / 10));
         }
 
-        if (ADC_IN_PIN) {
+        if constexpr (ADC_IN_PIN) {
             const auto current { SpeedControl::get_motor_current() };
             if (current >= MOTOR_CURRENT_TRESHOLD) {
                 printf("Motor current: %u mA\n", current);
@@ -138,14 +141,14 @@ static void setup_task(void*) {
 int main() {
     stdio_init_all();
 
-    if (DEBUG) {
+    if constexpr (DEBUG) {
         busy_wait_ms(2'000);
-        printf("\n\nRunning FreeRTOS kernel " tskKERNEL_VERSION_NUMBER ". Built by gcc " __VERSION__ ".\n\n");
+        printf("\n\nRunning FreeRTOS kernel " tskKERNEL_VERSION_NUMBER ". Built by gcc " __VERSION__ " on " __DATE__ ".\n\n");
     }
 
     xTaskCreateAffinitySet(setup_task, "setup", 512, nullptr, 2, 1 << INIT_CORE_ID, nullptr);
 
-    if (DEBUG) {
+    if constexpr (DEBUG) {
         printf("main(): starting scheduler...\n\n");
     }
 
