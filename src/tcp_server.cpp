@@ -150,7 +150,7 @@ err_t TcpServer::cb_accept(void* arg, struct tcp_pcb* client_pcb, err_t err) {
     tcp_write(client_pcb, "\xff\xfe\x01", 3, TCP_WRITE_FLAG_COPY);
     tcp_write(client_pcb, "\xff\xfe\x22", 3, TCP_WRITE_FLAG_COPY);
 
-    tcp_write(client_pcb, "ESP32 telnet-2-serial ready.\r\n", 30, TCP_WRITE_FLAG_COPY);
+    tcp_write(client_pcb, "telnet-2-serial ready.\r\n", 24, TCP_WRITE_FLAG_COPY);
 
     return ERR_OK;
 }
