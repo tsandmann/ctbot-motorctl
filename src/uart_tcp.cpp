@@ -132,12 +132,16 @@ void UartTcp::run() {
                 rx_len = p_tcp_rx_buffer_->size();
             }
 
-            p_tcp_server_->read(client, p_tcp_rx_buffer_->data(), rx_len);
+            const auto received { p_tcp_server_->read(client, p_tcp_rx_buffer_->data(), rx_len) };
+            if constexpr (DEBUG_) {
+                p_tcp_rx_buffer_->data()[received] = 0;
+                printf("%s", p_tcp_rx_buffer_->data());
+            }
 
             auto p_recv_buffer = p_tcp_rx_buffer_->data();
-            /* discard telnet commands during first 2 seconds */
+            /* discard telnet commands during first second */
             while (*p_recv_buffer == 0xff && rx_len >= 3) {
-                if (time_us_32() / 1'000UL < p_tcp_server_->get_connect_time(client) + 2'000UL) {
+                if (time_us_32() / 1'000UL < p_tcp_server_->get_connect_time(client) + 1'000UL) {
                     p_recv_buffer += 3;
                     rx_len -= 3;
                 } else {

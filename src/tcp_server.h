@@ -74,13 +74,15 @@ protected:
 
     struct TcpClient {
         tcp_pcb* p_pcb_;
-        uint8_t* p_rx_buffer_;
-        uint16_t received_;
+        pbuf* rx_buf_;
+        size_t rx_buf_offset_;
         uint16_t to_send_;
         uint32_t connect_time_;
 
         TcpClient(tcp_pcb* pcb, size_t rx_buf_size);
         ~TcpClient();
+
+        void rx_buf_consume(size_t size);
     };
 
     tcp_pcb* p_server_pcb_;

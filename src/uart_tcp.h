@@ -46,7 +46,7 @@ class UartTcp {
 
     static constexpr uint8_t MAX_INSTANCES_ { 2 };
     static constexpr size_t UART_RX_BUFFER_SIZE_ { 8192 };
-    static constexpr size_t TCP_RX_BUFFER_SIZE_ { 256 };
+    static constexpr size_t TCP_RX_BUFFER_SIZE_ { 32 };
     static constexpr size_t TCP_TX_BUFFER_SIZE_ { 256 };
     static constexpr uint8_t TASK_PRIORITY_ { 2 };
     static constexpr size_t STACK_SIZE_ { 512 };

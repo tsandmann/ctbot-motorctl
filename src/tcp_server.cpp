@@ -34,13 +34,29 @@
 
 
 TcpServer::TcpClient::TcpClient(tcp_pcb* pcb, size_t rx_buf_size)
-    : p_pcb_ { pcb }, p_rx_buffer_ { new uint8_t[rx_buf_size] }, received_ {}, to_send_ {}, connect_time_ { time_us_32() / 1'000UL } {
-    configASSERT(p_rx_buffer_);
-    p_rx_buffer_[0] = 0;
-}
+    : p_pcb_ { pcb }, rx_buf_ {}, rx_buf_offset_ {}, to_send_ {}, connect_time_ { time_us_32() / 1'000UL } {}
 
-TcpServer::TcpClient::~TcpClient() {
-    delete[] p_rx_buffer_;
+TcpServer::TcpClient::~TcpClient() {}
+
+void TcpServer::TcpClient::rx_buf_consume(size_t size) {
+    ptrdiff_t left { rx_buf_->len - rx_buf_offset_ - size };
+    if (left > 0) {
+        rx_buf_offset_ += size;
+    } else if (!rx_buf_->next) {
+        pbuf_free(rx_buf_);
+        rx_buf_ = nullptr;
+        rx_buf_offset_ = 0;
+    } else {
+        auto head { rx_buf_ };
+        rx_buf_ = rx_buf_->next;
+        rx_buf_offset_ = 0;
+        pbuf_ref(rx_buf_);
+        pbuf_free(head);
+    }
+
+    if (p_pcb_) {
+        tcp_recved(p_pcb_, size);
+    }
 }
 
 
@@ -203,19 +219,20 @@ err_t TcpServer::cb_recv(void* arg, tcp_pcb* client_pcb, struct pbuf* p, err_t e
         return res;
     }
 
-    if (p->tot_len > 0) {
-        auto& received { p_this->clients_.at(client_pcb)->received_ };
-
+    auto p_client { p_this->clients_.at(client_pcb) };
+    if (p_client->rx_buf_) {
         if constexpr (DEBUG_) {
-            printf("TcpServer::cb_recv(): %u/%u err %d\n", p->tot_len, received, err);
+            printf("TcpServer::cb_recv(): %u/%u err %d\n", p_client->rx_buf_->tot_len, p->tot_len, err);
         }
-
-        const uint16_t buffer_left { static_cast<uint16_t>(RX_BUF_SIZE_ - received) };
-        received += pbuf_copy_partial(p, &p_this->clients_.at(client_pcb)->p_rx_buffer_[received], p->tot_len > buffer_left ? buffer_left : p->tot_len, 0);
-        tcp_recved(client_pcb, p->tot_len > buffer_left ? buffer_left : p->tot_len);
+        pbuf_cat(p_client->rx_buf_, p);
+    } else {
+        if constexpr (DEBUG_) {
+            printf("TcpServer::cb_recv(): %u err %d\n", p->tot_len, err);
+        }
+        p_client->rx_buf_ = p;
+        p_client->rx_buf_offset_ = 0;
     }
 
-    pbuf_free(p);
     return ERR_OK;
 }
 
@@ -331,15 +348,39 @@ uint16_t TcpServer::read(tcp_pcb* client_pcb, void* p_data, uint16_t len) {
         return 0;
     }
 
-    auto client { clients_.at(client_pcb) };
-    if (len > client->received_) {
-        len = client->received_;
+    auto p_client { clients_.at(client_pcb) };
+    if (!p_client->rx_buf_) {
+        cyw43_arch_lwip_end();
+        return 0;
     }
-    std::memcpy(p_data, client->p_rx_buffer_, len);
-    client->received_ -= len;
+
+    size_t max_size { p_client->rx_buf_->tot_len - p_client->rx_buf_offset_ };
+    if (len > max_size) {
+        len = max_size;
+    }
+
+    if constexpr (DEBUG_) {
+        printf("TcpServer::read(%u): %u, %u\n", len, p_client->rx_buf_->tot_len, p_client->rx_buf_offset_);
+    }
+
+    size_t size_read {};
+    auto p_dest { reinterpret_cast<char*>(p_data) };
+    while (len) {
+        size_t buf_size = p_client->rx_buf_->len - p_client->rx_buf_offset_;
+        size_t copy_size = (len < buf_size) ? len : buf_size;
+        std::memcpy(p_dest, reinterpret_cast<char*>(p_client->rx_buf_->payload) + p_client->rx_buf_offset_, copy_size);
+        p_dest += copy_size;
+        p_client->rx_buf_consume(copy_size);
+        len -= copy_size;
+        size_read += copy_size;
+    }
 
     cyw43_arch_lwip_end();
-    return len;
+
+    if constexpr (DEBUG_) {
+        printf("TcpServer::read(): done: %u\n", size_read);
+    }
+    return size_read;
 }
 
 uint16_t TcpServer::write(tcp_pcb* client_pcb, const void* p_data, uint16_t len, bool copy) {
@@ -430,7 +471,13 @@ uint16_t TcpServer::available(tcp_pcb* client) const {
         return 0;
     }
 
-    const auto res { clients_.at(client)->received_ };
+    auto p_client { clients_.at(client) };
+    if (!p_client->rx_buf_) {
+        cyw43_arch_lwip_end();
+        return 0;
+    }
+
+    const auto res { p_client->rx_buf_->tot_len - p_client->rx_buf_offset_ };
     cyw43_arch_lwip_end();
     return res;
 }
@@ -442,7 +489,7 @@ tcp_pcb* TcpServer::available() const {
 
     cyw43_arch_lwip_begin(); // TODO: distinct mutex for clients_?
     for (auto client : clients_) {
-        if (client.second->received_) {
+        if (client.second->rx_buf_) {
             const auto res { client.first };
             cyw43_arch_lwip_end();
             return res;

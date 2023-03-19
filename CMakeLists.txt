@@ -64,7 +64,7 @@ add_subdirectory(FreeRTOS-Kernel/portable/ThirdParty/GCC/RP2040 FreeRTOS-Kernel)
 target_link_libraries(motorctl FreeRTOS-Kernel pico_cyw43_arch_lwip_sys_freertos pico_stdlib hardware_pwm hardware_adc)
 
 if (STTY_UPLOAD_COMMAND)
-    install(CODE "execute_process(COMMAND ${STTY_UPLOAD_COMMAND} COMMAND ${CMAKE_COMMAND} -E sleep 2)")
+    install(CODE "execute_process(COMMAND ${STTY_UPLOAD_COMMAND} COMMAND ${CMAKE_COMMAND} -E sleep 3)")
 endif (STTY_UPLOAD_COMMAND)
 
 if (UPLOAD_PATH)
